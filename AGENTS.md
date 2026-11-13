@@ -3,6 +3,10 @@
 You are installing SiaoHerdr, a layout and mods for the Herdr app, on the user's machine. Follow these
 steps in order and report what each one printed. Do not change anything the steps don't mention.
 
+**Never open new app windows** while installing or testing (no second Herdr window, no separate test
+instance). To look at something, open a new tab in the Herdr the user already has open, and close it
+afterwards.
+
 ## 1. Check the prerequisites
 
 - macOS or Linux (Windows is not supported).
