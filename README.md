@@ -24,7 +24,23 @@ A layout and a set of mods for [Herdr](https://github.com/herdrdev/herdr-app) (w
 
 ## Install
 
-Open Herdr once, then:
+### With an AI agent
+
+Paste this into Claude Code (or any coding agent):
+
+```
+Install SiaoHerdr for me by following https://github.com/shihte/siao-herdr/blob/main/AGENTS.md
+```
+
+中文：
+
+```
+請照 https://github.com/shihte/siao-herdr/blob/main/AGENTS.md 幫我安裝 SiaoHerdr
+```
+
+### By hand
+
+Needs macOS or Linux, `git`, `python3`, and [Herdr](https://github.com/herdrdev/herdr-app) opened once. Then:
 
 ```sh
 git clone https://github.com/shihte/siao-herdr.git
@@ -51,7 +67,7 @@ sh Install.sh --no-skills              # interface only, even if skills were ins
 
 ### Usage strip
 
-The strip reads what Claude Code's statusline writes. If you have `~/.claude/statusline.sh`, `Install.sh` appends one line to it; otherwise it tells you the line to add.
+The strip reads what Claude Code hands its statusline. With no statusline of your own, `Install.sh` sets a small one (model · context %). If you already have one, it prints the line your script needs to add.
 
 ## License
 

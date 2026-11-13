@@ -46,8 +46,8 @@ for M in SiaoBrand SiaoSpaces SiaoTabs SiaoBoard SiaoNotes SiaoQuota; do touch "
 python3 "$Src/bin/SiaoChromeGen" "$AppHome"   # brand + footer (Herdr's workspace-chrome, renamed SiaoDesk)
 # This is the line for Herdr's own app: no 預覽, no bottom drawers, no zh-TW dictionary (those need
 # SiaoDesk, the patched build — branch main / stable).
-for B in SiaoQuota SiaoStatusSave SiaoRestart SiaoSubagents; do cp "$Src/bin/$B" "$AppHome/bin/"; chmod +x "$AppHome/bin/$B"; done
-case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) echo "Add $HOME/.local/bin to PATH, or the + menu will not find its programs.";; esac
+for B in SiaoQuota SiaoStatusSave SiaoStatusLine SiaoRestart SiaoSubagents; do cp "$Src/bin/$B" "$AppHome/bin/"; chmod +x "$AppHome/bin/$B"; done
+if Has dispatcher; then case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) echo "Add $HOME/.local/bin to PATH, or the + menu will not find Siao Dispatcher.";; esac; fi
 
 # Skill "dispatcher": /SiaoDispatcher and the ＋ menu's Siao Dispatcher
 if Has dispatcher; then
@@ -100,14 +100,34 @@ for Ev, Matcher in [("PreToolUse", "*"), ("SubagentStart", None), ("SubagentStop
 Save(f"{Home}/.claude/settings.json", S)
 EOF
 
-# Claude Code statusline → per-terminal session file (model / context of the focused agent, and the restart button)
-Line='[[ -n $HC_TERMINAL_ID ]] && print -r -- "$Input" | ~/.config/herdr-app/bin/SiaoStatusSave $PPID'
-if [ -f "$HOME/.claude/statusline.sh" ]; then
-  grep -q SiaoStatusSave "$HOME/.claude/statusline.sh" || printf '%s\n' "$Line" >> "$HOME/.claude/statusline.sh"
-else
-  echo "No ~/.claude/statusline.sh: the bottom strip falls back to ~/.cache/ClaudeStatus.json, restart needs the line above in your statusline."
-fi
+# Claude Code statusline → per-terminal session file (the usage strip, the focused agent's model / context,
+# the restart button). Nobody's statusline yet: ours. One of your own: it has to pass Claude Code's JSON on.
+python3 - "$AppHome" "$HOME" <<'PY'
+import json, os, sys
+AppHome, Home = sys.argv[1:3]
+P = f"{Home}/.claude/settings.json"
+S = json.load(open(P)) if os.path.exists(P) else {}
+Mine = f"{AppHome}/bin/SiaoStatusLine"
+Cmd = (S.get("statusLine") or {}).get("command", "")
+if not Cmd:
+    S["statusLine"] = {"type": "command", "command": Mine}
+    os.makedirs(os.path.dirname(P), exist_ok=True)
+    json.dump(S, open(P, "w"), ensure_ascii=False, indent=2)
+    print("Claude Code statusline: SiaoStatusLine (model · context %).")
+elif "SiaoStatus" not in Cmd and not any(os.path.isfile(os.path.expanduser(T)) and "SiaoStatusSave" in open(os.path.expanduser(T), errors="ignore").read() for T in Cmd.split()):
+    print(f"Your statusline ({Cmd}) must also pass Claude Code's JSON to {AppHome}/bin/SiaoStatusSave $PPID for the usage strip, e.g. add:\n  printf '%s' \"$Input\" | {AppHome}/bin/SiaoStatusSave $PPID   (with Input=$(cat) at the top)")
+PY
 
+# herdr-app (Herdr's command): on PATH from Herdr's installer (~/.local/bin); a DMG or Homebrew install
+# keeps it inside the app.
+App=$(command -v herdr-app 2>/dev/null || true)
+for C in "$HOME/.local/bin/herdr-app" "$HOME/Applications/Herdr.app/Contents/MacOS/Herdr" "/Applications/Herdr.app/Contents/MacOS/Herdr"; do
+  [ -n "$App" ] && break; [ -x "$C" ] && App="$C"
+done
+if [ -z "$App" ]; then
+  echo "Installed. herdr-app not found, so the mods were not checked; open Herdr and press ctrl-shift-b for the Siao layout."
+  exit 0
+fi
 echo "Installed. Checking mods:"
-for M in SiaoBrand SiaoChrome SiaoSpaces SiaoTabs SiaoBoard SiaoNotes SiaoQuota SiaoMenu SiaoChanges SiaoHints SiaoPaneHead SiaoNewMenu; do herdr-app check "$AppHome/mods/$M" || echo "  ^ $M failed, see above"; done
-echo "Switch layout:  herdr-app do layout.switch '{\"name\":\"Siao\"}'   (ctrl-shift-b)"
+for M in SiaoBrand SiaoChrome SiaoSpaces SiaoTabs SiaoBoard SiaoNotes SiaoQuota SiaoMenu SiaoChanges SiaoHints SiaoPaneHead SiaoNewMenu; do "$App" check "$AppHome/mods/$M" || echo "  ^ $M failed, see above"; done
+echo "Switch layout:  ctrl-shift-b in Herdr, or  \"$App\" do layout.switch '{\"name\":\"Siao\"}'"

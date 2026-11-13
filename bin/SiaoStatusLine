@@ -1,0 +1,13 @@
+#!/bin/sh
+# SiaoStatusLine: a Claude Code statusline for people who had none (Install.sh sets it in
+# ~/.claude/settings.json then). Hands Claude Code's JSON to SiaoStatusSave (the usage strip and the
+# focused agent's model/context read what it saves) and prints a short line: model · context %.
+Input=$(cat)
+[ -n "$HC_TERMINAL_ID" ] && printf '%s' "$Input" | "$(dirname "$0")/SiaoStatusSave" "$PPID"
+printf '%s' "$Input" | python3 -c '
+import json, sys
+try: D = json.load(sys.stdin)
+except Exception: sys.exit(0)
+M = (D.get("model") or {}).get("display_name") or ""
+C = (D.get("context_window") or {}).get("used_percentage")
+print(M + (f" · {C:.0f}%" if isinstance(C, (int, float)) else ""))'
