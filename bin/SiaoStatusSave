@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""SiaoStatusSave <claude_pid>：由 ~/.claude/statusline.sh 呼叫，stdin 是 Claude Code 給 statusline 的 JSON。
+
+存成 ~/.cache/ClaudeStatus/<HC_TERMINAL_ID>.json，多加兩個欄位：
+  hc_terminal  這個 Claude Code 跑在哪個 Herdr terminal（t16…）
+  claude_cmd   claude 程序的完整指令（重新整理＝退出重進時沿用同樣的參數）
+  claude_pid   claude 程序的 PID（重新整理時等它結束再重進）
+SiaoQuota 用它顯示「聚焦的 agent」的模型／會話，SiaoRestart 用它重開同一個會話。
+"""
+import json, os, subprocess, sys
+Term = os.environ.get("HC_TERMINAL_ID")
+if not Term: sys.exit(0)
+try: Data = json.loads(sys.stdin.read())
+except Exception: sys.exit(0)
+Data["hc_terminal"] = Term
+if len(sys.argv) > 1:
+    Cmd = subprocess.run(["ps", "-o", "command=", "-p", sys.argv[1]], capture_output=True, text=True).stdout.strip()
+    if Cmd: Data["claude_cmd"] = Cmd
+    Data["claude_pid"] = int(sys.argv[1])
+Dir = os.path.expanduser("~/.cache/ClaudeStatus")
+os.makedirs(Dir, exist_ok=True)
+Tmp = f"{Dir}/.{Term}.tmp"
+json.dump(Data, open(Tmp, "w"), ensure_ascii=False)
+os.replace(Tmp, f"{Dir}/{Term}.json")

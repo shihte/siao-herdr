@@ -1,0 +1,101 @@
+#!/bin/sh
+# SiaoRestart <terminal> [tab index] [tab name]
+# Claude Code 的「重新整理」＝退出再用同一個會話重進（claude … --resume <session_id>）。
+#
+# 不往 terminal 裡打字（hc send 會把文字包成 <hc …> 標記，shell 和 /exit 都認不得），而是：
+#   1. SIGTERM 結束原本的 claude（它會先存好會話）
+#   2. Herdr tab.new：同一個空間、同一個資料夾，argv 直接是 claude <原參數> --resume <id>
+#   3. 新分頁移回原位置（有給 index 時）、沿用名稱（有給時），關掉舊分頁
+# 沒有分頁的 terminal（背景 agent）改用 terminal.open。
+# 資料來自 ~/.cache/ClaudeStatus/<terminal>.json（SiaoStatusSave 寫的）。
+set -e
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"   # the app's exec PATH may lack these
+T="${1:?usage: SiaoRestart <terminal> [tab index] [tab name]}"
+Index="${2:-}"; Name="${3:-}"
+# Which claude runs in that terminal: the process whose environment says HC_TERMINAL_ID=<terminal>.
+# Its session id and folder are in ~/.claude/sessions/<pid>.json (Claude Code keeps that per process),
+# so idle agents and ones started before SiaoStatusSave existed work too. The statusline file is the fallback.
+Pid=""
+for P in $(pgrep -x claude 2>/dev/null; pgrep -f '(^|/)claude( |$)' 2>/dev/null); do
+  ps eww -o command= -p "$P" 2>/dev/null | grep -q "HC_TERMINAL_ID=$T\( \|$\)" && { Pid=$P; break; }
+done
+F=$(mktemp); trap 'rm -f "$F"' EXIT
+python3 - "$T" "$Pid" "$F" <<'PY' || exit 1
+import json, os, subprocess, sys
+T, Pid, Out = sys.argv[1:4]
+Home = os.path.expanduser("~")
+D = {}
+Cache = f"{Home}/.cache/ClaudeStatus/{T}.json"
+if os.path.isfile(Cache): D = json.load(open(Cache))
+if Pid:
+    S = f"{Home}/.claude/sessions/{Pid}.json"
+    if os.path.isfile(S):
+        J = json.load(open(S))
+        D.update({"session_id": J.get("sessionId") or D.get("session_id"), "cwd": J.get("cwd") or D.get("cwd"), "claude_pid": int(Pid)})
+    Cmd = subprocess.run(["ps", "-o", "command=", "-p", Pid], capture_output=True, text=True).stdout.strip()
+    if Cmd: D["claude_cmd"] = Cmd
+    D["claude_pid"] = int(Pid)
+if not D.get("session_id"):
+    sys.exit(f"找不到 {T} 的 Claude Code 會話（這個 terminal 裡沒有執行中的 claude？）")
+json.dump(D, open(Out, "w"))
+PY
+
+Plan=$(hc get "$T" --json 2>/dev/null | python3 -c '
+import json, shlex, sys
+Status = json.load(open(sys.argv[1]))
+try: Term = json.load(sys.stdin)
+except Exception: Term = {}
+Sid = Status.get("session_id") or sys.exit("沒有 session_id")
+Raw = shlex.split(Status.get("claude_cmd") or "claude")
+# ps gives the real executable (maybe node …/cli.js or a full path): start from "claude", keep only the
+# user flags, drop old resume / continue / session-id.
+I = next((i for i, A in enumerate(Raw) if A.rsplit("/", 1)[-1] in ("claude", "cli.js")), 0)
+# Positional words are the first prompt (ps loses their quoting anyway): drop them, or the resumed
+# session would get that prompt again. Keep flags, and the value after flags that take one.
+Valued = {"--model", "--permission-mode", "--add-dir", "--settings", "--mcp-config", "--append-system-prompt",
+          "--system-prompt", "--allowedTools", "--allowed-tools", "--disallowedTools", "--disallowed-tools",
+          "--agent", "--agents", "--effort", "--fallback-model", "--setting-sources", "--plugin-dir", "--output-style"}
+Drop = {"-r", "--resume", "--session-id"}
+Out, Args, K = [], Raw[I + 1:], 0
+while K < len(Args):
+    A = Args[K]; K += 1
+    if A in Drop: K += 1; continue
+    if A in ("-c", "--continue", "-p", "--print") or A.startswith(("--resume=", "--session-id=")): continue
+    if not A.startswith("-"): continue
+    Out.append(A)
+    if A in Valued and K < len(Args): Out.append(Args[K]); K += 1
+L = Term.get("labels") or {}
+print(json.dumps({
+    "argv": ["claude", *Out, "--resume", Sid],
+    "folder": Status.get("cwd") or (Status.get("workspace") or {}).get("current_dir") or Term.get("cwd") or "",
+    "pid": Status.get("claude_pid") or 0,
+    "tab": L.get("herdr.tab") or "",
+    "space": L.get("herdr.space") or "",
+}))
+' "$F")
+Field() { printf '%s' "$Plan" | python3 -c "import json,sys;v=json.load(sys.stdin)[sys.argv[1]];print(json.dumps(v) if isinstance(v,(list,dict)) else v)" "$1"; }
+Pid=$(Field pid); Tab=$(Field tab); Space=$(Field space); Folder=$(Field folder); Argv=$(Field argv)
+
+# 1. End the old claude and wait (max 15 s) so two processes never hold the same session.
+if [ "$Pid" != "0" ] && kill -0 "$Pid" 2>/dev/null; then
+  kill -TERM "$Pid"
+  i=0; while kill -0 "$Pid" 2>/dev/null && [ $i -lt 30 ]; do sleep 0.5; i=$((i + 1)); done
+  kill -0 "$Pid" 2>/dev/null && { echo "Claude Code 15 秒內沒有結束，已取消重進" >&2; exit 1; }
+fi
+
+Json() { python3 -c 'import json,sys; print(json.dumps({k: v for k, v in zip(sys.argv[1::2], sys.argv[2::2]) if v}))' "$@"; }
+WithArgv() { printf '%s' "$1" | python3 -c 'import json,sys; d=json.load(sys.stdin); d["argv"]=json.loads(sys.argv[1]); print(json.dumps(d))' "$2"; }
+
+if [ -n "$Tab" ]; then
+  # 2. New tab in the same space and folder, running claude --resume directly.
+  New=$(herdr-app do tab.new "$(WithArgv "$(Json space "$Space" folder "$Folder" name "$Name")" "$Argv")")
+  NewTab=$(printf '%s' "$New" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("tab",""))')
+  [ -n "$NewTab" ] || { echo "開新分頁失敗：$New" >&2; exit 1; }
+  # 3. Back to the old position, then close the old tab.
+  [ -n "$Index" ] && herdr-app do tab.move "{\"id\":\"$NewTab\",\"index\":$Index}" >/dev/null 2>&1 || true
+  herdr-app do tab.close "{\"id\":\"$Tab\",\"confirmed\":true}" >/dev/null 2>&1 || true
+  herdr-app do tab.select "{\"id\":\"$NewTab\"}" >/dev/null 2>&1 || true
+else
+  herdr-app do terminal.open "$(WithArgv "$(Json folder "$Folder" name "$Name")" "$Argv")" >/dev/null
+fi
+printf '%s\n' "$(printf '%s' "$Argv" | python3 -c 'import json,shlex,sys; print(shlex.join(json.load(sys.stdin)))')"

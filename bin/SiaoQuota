@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""SiaoQuota：輸出目前 Claude 訂閱額度的 JSON，給 SiaoQuota mod 與調度員守門用。
+
+輸出格式 (一行 JSON)：
+  {"fiveHourPct": 0-100, "resetIn": "1h12m", "weekPct": 0-100, "weekTodayPct": 0-100, "source": "..."}
+  官方來源另外附上最近一次更新 statusline 的 session：model、contextPct、contextTokens、contextSize、sessionName、sessionCwd
+
+取得來源，依序嘗試：
+  1. 環境變數 SIAO_QUOTA_CMD：你自己的指令，須印出同格式 JSON。
+  2. 官方額度：Claude Code 傳給 statusline 的 rate_limits，由 ~/.claude/statusline.sh 寫到
+     ~/.cache/ClaudeStatus.json (路徑可用 SIAO_STATUS_JSON 覆寫)。weekTodayPct 是近似值：
+     今天第一次讀到的 seven_day % 存在 ~/.cache/SiaoQuotaDay.json 當基準。
+  讀不到：stdout 不印東西、exit 1、stderr 一行原因。不估算、不印 0。
+"""
+import json, os, subprocess, sys, time, datetime
+
+def Emit(Data):
+    print(json.dumps(Data, ensure_ascii=False)); sys.exit(0)
+
+Custom = os.environ.get("SIAO_QUOTA_CMD")
+if Custom:
+    try:
+        Out = subprocess.run(Custom, shell=True, capture_output=True, text=True, timeout=15).stdout
+        Data = json.loads(Out); Data.setdefault("source", "custom"); Emit(Data)
+    except Exception as E:
+        Emit({"fiveHourPct": 0, "weekPct": 0, "weekTodayPct": 0, "resetIn": "", "source": f"custom failed: {E}"})
+
+def Remain(Epoch):
+    S = max(0, int(Epoch - time.time()))
+    return f"{S // 86400}d{(S % 86400) // 3600}h" if S >= 86400 else f"{S // 3600}h{(S % 3600) // 60:02d}m"
+
+StatusPath = os.path.expanduser(os.environ.get("SIAO_STATUS_JSON", "~/.cache/ClaudeStatus.json"))
+SessionDir = os.path.expanduser("~/.cache/ClaudeStatus")
+Wanted = sys.argv[1] if len(sys.argv) > 1 else ""  # SiaoQuota [terminal]: that agent's model / context
+try:
+    # Rate limits are per account: take the newest file. Model / context are per session: the asked
+    # terminal's own file when it has one, else the newest.
+    Files = [StatusPath] + [os.path.join(SessionDir, F) for F in (os.listdir(SessionDir) if os.path.isdir(SessionDir) else []) if F.endswith(".json")]
+    Files = [F for F in Files if os.path.isfile(F)]
+    # A session that just started has no rate_limits until its first API reply: skip those for the limits.
+    Loaded = [(F, json.load(open(F))) for F in sorted(Files, key=os.path.getmtime, reverse=True)]
+    Newest, Status = next(((F, D) for F, D in Loaded if D.get("rate_limits")), Loaded[0])
+    Mine = os.path.join(SessionDir, f"{Wanted}.json") if Wanted else ""
+    Own = json.load(open(Mine)) if Mine and os.path.isfile(Mine) else Status
+    StatusPath = Newest
+    Limits = Status.get("rate_limits") or {}
+    Ctx = Own.get("context_window") or {}
+    Session = {"model": (Own.get("model") or {}).get("display_name", ""),
+               "terminal": Own.get("hc_terminal") or "",
+               "sessionId": Own.get("session_id") or "",
+               "contextPct": Ctx.get("used_percentage"),
+               "contextTokens": Ctx.get("total_input_tokens"),
+               "contextSize": Ctx.get("context_window_size"),
+               "sessionName": Own.get("session_name") or "",
+               "sessionCwd": Own.get("cwd") or ""}
+    Five, Week = Limits.get("five_hour"), Limits.get("seven_day")
+    if Five and Week:
+        Now = time.time()
+        # A window whose reset time has passed has started over: nothing used in it yet.
+        FivePct = Five["used_percentage"] if Five.get("resets_at", 0) > Now else 0
+        WeekPct = Week["used_percentage"] if Week.get("resets_at", 0) > Now else 0
+        DayPath = os.path.expanduser("~/.cache/SiaoQuotaDay.json")
+        Today = datetime.date.today().isoformat()
+        try: Day = json.load(open(DayPath))
+        except Exception: Day = {}
+        if Day.get("date") != Today or Day.get("weekResetsAt") != Week.get("resets_at") or WeekPct < Day.get("startWeekPct", 0):
+            Day = {"date": Today, "startWeekPct": WeekPct, "weekResetsAt": Week.get("resets_at")}
+            json.dump(Day, open(DayPath, "w"))
+        Age = int(Now - os.path.getmtime(StatusPath))
+        Emit({"fiveHourPct": FivePct, "resetIn": Remain(Five["resets_at"]) if FivePct else "",
+              "weekPct": WeekPct, "weekResetIn": Remain(Week["resets_at"]) if WeekPct else "",
+              "weekTodayPct": round(WeekPct - Day["startWeekPct"], 1),
+              "source": "official", "ageSeconds": Age, **Session})
+except (OSError, ValueError, KeyError, TypeError, IndexError):
+    pass
+
+# No official numbers: say so and stop. No estimates, no zeros dressed up as a reading.
+print("讀不到官方額度（~/.cache/ClaudeStatus.json 裡還沒有 rate_limits）", file=sys.stderr)
+sys.exit(1)

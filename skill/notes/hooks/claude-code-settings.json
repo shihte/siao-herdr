@@ -1,0 +1,35 @@
+{
+  "_comment": "Merge the `hooks` object into the project's .claude/settings.json (or ~/.claude/settings.json). SessionStart injects the handoff so a new session starts at a fact; PreCompact fires before context is summarised, which is exactly the moment a handoff is lost if it isn't written. Hook event names and stdout handling follow Claude Code's hooks docs for your version — check them if a hook doesn't appear to fire.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f ClaudeDocs/HANDOFF.md ]; then echo '[notes skill] Working journal present. Read order: HANDOFF.md (below) → OVERVIEW.md → chapter headings only. Verify load-bearing claims before acting on them.'; echo '--- ClaudeDocs/HANDOFF.md ---'; cat ClaudeDocs/HANDOFF.md; fi"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -d ClaudeDocs ]; then echo '[notes skill] Context is about to be compacted. Before continuing: put a status line on the open chapter and REWRITE ClaudeDocs/HANDOFF.md from verified state (notes skill §8 / MODES handoff-now). Anything not written now is lost.'; fi"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -d ClaudeDocs ] && [ -x .claude/skills/notes/scripts/lint.sh ]; then .claude/skills/notes/scripts/lint.sh ClaudeDocs | tail -15; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,18 @@
+#!/bin/sh
+# Siao: start a Dispatcher — a Claude Code session carrying the SiaoDispatcher protocol.
+# Launched from Herdr's + menu (programs.json "siao") or by hand:  hc run --keep --name dispatcher -- Siao
+# The role comes from how the process was started, so no sub-agent can mistake itself for the dispatcher.
+set -e
+AppHome="${HERDR_APP_HOME:-${XDG_CONFIG_HOME:-$HOME/.config}/herdr-app}"
+Protocol="$AppHome/skill/SiaoDispatcher/SKILL.md"
+
+if [ -n "$HC_TERMINAL_ID" ] && command -v hc >/dev/null 2>&1; then
+  hc label "$HC_TERMINAL_ID" siao.role=Dispatcher siao.tier=strong "siao.started=$(date +%s)" >/dev/null 2>&1 || true
+fi
+
+[ -f "$Protocol" ] || { echo "Missing $Protocol — run SiaoHerdr/Install.sh first." >&2; exit 1; }
+
+export SIAO_PROTOCOL="$Protocol"
+export SIAO_DISPATCHER="${HC_TERMINAL_ID:-}"
+export SIAO_ROLES="$AppHome/skill/SiaoDispatcher/roles"
+exec claude --append-system-prompt "$(cat "$Protocol")" "$@"

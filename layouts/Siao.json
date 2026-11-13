@@ -1,0 +1,244 @@
+{
+  "id": "root",
+  "type": "row",
+  "titlebar": "none",
+  "traffic_lights": [
+    20,
+    24
+  ],
+  "background": "canvas",
+  "theme": {
+    "light": "paper",
+    "dark": "graphite"
+  },
+  "colors": {
+    "accent": "#7cc4a4"
+  },
+  "terminal_padding": [
+    14,
+    12
+  ],
+  "divider": {
+    "width": 0
+  },
+  "children": [
+    {
+      "id": "sidebar",
+      "type": "column",
+      "size": {
+        "px": 300
+      },
+      "min": 84,
+      "max": 520,
+      "children": [
+        {
+          "id": "brand",
+          "type": "block",
+          "size": {
+            "px": 46
+          },
+          "window_drag": true,
+          "content": {
+            "mod": "SiaoBrand"
+          },
+          "background": "background",
+          "radius": 10,
+          "border": {
+            "width": 1,
+            "color": "#7cc4a480"
+          }
+        },
+        {
+          "id": "spaces",
+          "type": "block",
+          "size": {
+            "px": 190
+          },
+          "min": 96,
+          "content": {
+            "mod": "SiaoSpaces"
+          },
+          "background": "background",
+          "radius": 10,
+          "border": {
+            "width": 1,
+            "color": "#7cc4a480"
+          }
+        },
+        {
+          "id": "agents",
+          "type": "block",
+          "size": {
+            "weight": 1
+          },
+          "min": 200,
+          "content": {
+            "mod": "SiaoBoard"
+          },
+          "background": "background",
+          "radius": 10,
+          "border": {
+            "width": 1,
+            "color": "#7cc4a480"
+          }
+        },
+        {
+          "id": "sidebar-footer",
+          "type": "block",
+          "size": {
+            "px": 48
+          },
+          "content": {
+            "mod": "SiaoChrome",
+            "props": {
+              "footer": true
+            }
+          },
+          "background": "background",
+          "radius": 10,
+          "border": {
+            "width": 1,
+            "color": "#7cc4a480"
+          }
+        }
+      ],
+      "padding": 0,
+      "gap": 8,
+      "divider": {
+        "width": 0
+      }
+    },
+    {
+      "id": "work",
+      "type": "column",
+      "children": [
+        {
+          "id": "tabs",
+          "type": "block",
+          "size": {
+            "px": 46
+          },
+          "window_drag": true,
+          "content": {
+            "mod": "SiaoTabs"
+          },
+          "background": "background",
+          "radius": 10,
+          "border": {
+            "width": 1,
+            "color": "#7cc4a480"
+          }
+        },
+        {
+          "id": "work-body",
+          "type": "row",
+          "padding": 0,
+          "gap": 8,
+          "children": [
+            {
+              "id": "main-col",
+              "type": "column",
+              "gap": 8,
+              "children": [
+                {
+                  "id": "main",
+                  "type": "block",
+                  "movable": false,
+                  "content": {
+                    "tab": "active",
+                    "pane": {
+                      "gap": 8,
+                      "radius": 10,
+                      "background": "background",
+                      "lone": true,
+                      "border": {
+                        "width": 1,
+                        "color": "#7cc4a480"
+                      },
+                      "focus": {
+                        "width": 1,
+                        "color": "accent"
+                      },
+                      "header": {
+                        "content": {
+                          "mod": "SiaoPaneHead"
+                        },
+                        "height": 30,
+                        "position": "top",
+                        "reveal": "always"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "id": "panel",
+              "type": "column",
+              "size": {
+                "px": 420
+              },
+              "min": 300,
+              "max": 900,
+              "children": [
+                {
+                  "id": "panel-body",
+                  "type": "stack",
+                  "active": "notes",
+                  "children": [
+                    {
+                      "id": "notes",
+                      "type": "block",
+                      "content": {
+                        "mod": "SiaoNotes"
+                      }
+                    },
+                    {
+                      "id": "files",
+                      "type": "block",
+                      "content": {
+                        "mod": "files"
+                      }
+                    },
+                    {
+                      "id": "changes",
+                      "type": "block",
+                      "content": {
+                        "mod": "SiaoChanges"
+                      }
+                    }
+                  ],
+                  "background": "background",
+                  "radius": 10,
+                  "border": {
+                    "width": 1,
+                    "color": "#7cc4a480"
+                  }
+                }
+              ],
+              "gap": 8
+            }
+          ]
+        },
+        {
+          "id": "quota",
+          "type": "block",
+          "size": {
+            "px": 48
+          },
+          "padding": 0,
+          "content": {
+            "mod": "SiaoQuota",
+            "props": {
+              "bar": true
+            }
+          }
+        }
+      ],
+      "gap": 8
+    }
+  ],
+  "terminal_menu": "SiaoMenu",
+  "padding": 8,
+  "gap": 8
+}

@@ -1,0 +1,13 @@
+{
+  "programs": {
+    "siao": {
+      "name": "Siao Dispatcher",
+      "icon": "mods/SiaoBoard/siao.svg",
+      "run": ["Siao"],
+      "match": ["Siao"],
+      "tint": true,
+      "tile": "#2a3d33",
+      "color": "#7cc4a4"
+    }
+  }
+}

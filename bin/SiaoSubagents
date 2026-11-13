@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+"""Claude Code hook: keeps the list of a session's running subagents (Agent / Task tool) for SiaoBoard.
+
+Hooked on PreToolUse (every tool), SubagentStart, SubagentStop and SessionStart. Writes
+~/.cache/siao-subagents/<HC_TERMINAL_ID>.json = {"agents": {id: {type, desc, started, parent, doing}}, "pending": [...]}.
+PreToolUse of Agent/Task sees the description (and, from inside a subagent, which one spawned it);
+SubagentStart sees the id — the oldest pending description of the same type goes with it. Any other
+tool call made inside a subagent (agent_id set) becomes that subagent's "doing" line. Outside Herdr (no HC_TERMINAL_ID) it does nothing. Never blocks Claude.
+"""
+import fcntl, json, os, sys, time
+
+Term = os.environ.get("HC_TERMINAL_ID")
+if not Term:
+    sys.exit(0)
+try:
+    Ev = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+Dir = os.path.expanduser("~/.cache/siao-subagents")
+os.makedirs(Dir, exist_ok=True)
+Path = f"{Dir}/{Term}.json"
+Name = Ev.get("hook_event_name", "")
+if Name == "PreToolUse" and not Ev.get("agent_id") and Ev.get("tool_name") not in ("Agent", "Task"):
+    sys.exit(0)   # most calls: the main agent's own, nothing to do
+
+
+def Doing(Tool, In):
+    """One short line for a tool call: 「讀 grips.js」, 「執行 cargo build」…"""
+    Base = lambda P: os.path.basename(str(P or "").rstrip("/")) or str(P or "")
+    Cut = lambda T, N=80: (T[:N] + "…") if len(T) > N else T
+    if Tool == "Bash": return Cut("執行 " + (In.get("description") or (str(In.get("command") or "").splitlines() or ["指令"])[0]))
+    if Tool == "Read": return f"讀 {Base(In.get('file_path'))}"
+    if Tool in ("Edit", "MultiEdit"): return f"改 {Base(In.get('file_path'))}"
+    if Tool == "Write": return f"寫 {Base(In.get('file_path'))}"
+    if Tool in ("Grep", "Glob"): return Cut(f"搜尋 {In.get('pattern') or ''}")
+    if Tool == "WebSearch": return Cut(f"網路搜尋 {In.get('query') or ''}")
+    if Tool == "WebFetch": return Cut(f"讀網頁 {In.get('url') or ''}")
+    if Tool == "TodoWrite": return "更新待辦"
+    return Cut(Tool.replace("mcp__", "").replace("__", " "))
+Now = time.time()
+
+with open(f"{Dir}/.lock", "w") as Lock:
+    fcntl.flock(Lock, fcntl.LOCK_EX)
+    try:
+        State = json.load(open(Path))
+    except Exception:
+        State = {}
+    Agents, Pending = State.get("agents", {}), State.get("pending", [])
+    if Name == "SessionStart" or State.get("session") not in (None, Ev.get("session_id")):
+        Agents, Pending = {}, []
+    Tool, In, Me = Ev.get("tool_name") or "", Ev.get("tool_input") or {}, Ev.get("agent_id")
+    if Name == "PreToolUse" and Tool in ("Agent", "Task"):
+        Pending.append({"type": In.get("subagent_type") or "general-purpose", "desc": In.get("description") or "", "t": Now, "parent": Me})
+        if Me in Agents: Agents[Me]["doing"] = f"開子代理：{In.get('description') or ''}"
+    elif Name == "PreToolUse":
+        if Me not in Agents:
+            sys.exit(0)   # the main agent's own call: nothing to record, leave the file alone
+        Agents[Me]["doing"] = Doing(Tool, In)
+    elif Name == "SubagentStart":
+        Type = Ev.get("agent_type") or ""
+        I = next((I for I, P in enumerate(Pending) if P["type"] == Type), 0 if Pending else None)
+        P = Pending.pop(I) if I is not None else {}
+        Id = Ev.get("agent_id") or str(Now)
+        # Its conversation (SiaoBoard opens it in 預覽): <session>/subagents/agent-<id>.jsonl beside the session's.
+        Main = Ev.get("transcript_path") or ""
+        Log = Ev.get("agent_transcript_path") or (f"{Main[:-6]}/subagents/agent-{Id}.jsonl" if Main.endswith(".jsonl") else "")
+        Agents[Id] = {"type": Type or P.get("type", ""), "desc": P.get("desc", ""), "started": Now, "parent": P.get("parent"), "log": Log}
+    elif Name == "SubagentStop":
+        Agents.pop(Ev.get("agent_id") or "", None)
+    # Anything older than 6 hours is a leftover (a crash, a missed stop).
+    Agents = {K: V for K, V in Agents.items() if Now - V.get("started", Now) < 6 * 3600}
+    Pending = [P for P in Pending if Now - P.get("t", Now) < 120]
+    Tmp = f"{Path}.tmp"
+    json.dump({"session": Ev.get("session_id"), "agents": Agents, "pending": Pending, "updated": Now}, open(Tmp, "w"), ensure_ascii=False)
+    os.replace(Tmp, Path)

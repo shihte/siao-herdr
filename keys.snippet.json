@@ -1,0 +1,19 @@
+{
+  "global": {
+    "ctrl-shift-h": {
+      "command": "tab.new",
+      "args": {
+        "name": "Dispatcher",
+        "argv": [
+          "Siao"
+        ]
+      }
+    },
+    "ctrl-shift-a": "SiaoBoard.toggle",
+    "ctrl-shift-j": "agent.next",
+    "ctrl-shift-k": "agent.prev",
+    "ctrl-shift-b": "layout.switch:Siao",
+    "ctrl-shift-r": "SiaoBoard.restart",
+    "cmd-;": "SiaoTabs.hints"
+  }
+}
