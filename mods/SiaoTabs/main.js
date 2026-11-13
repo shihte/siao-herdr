@@ -275,9 +275,8 @@ export default class SiaoTabs extends View {
       .when(Boolean(CloseBadge), (El) => El.child(CloseBadge))
       .child(Strip)
       .when(Boolean(NewBadge), (El) => El.child(NewBadge))
-      // ＋ adds a tab right here (a terminal, like ⌘T); right-click it for the menu of what to start.
-      .child(Button("tab-new", "+", () => this.NewTabHere())
-        .tooltip("新分頁（右鍵：選要開什麼）").on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); NewTab(); }))
+      // ＋: the menu of what to start (SiaoNewMenu puts the tab in the shown folder, its group unfolded).
+      .child(Button("tab-new", "+", NewTab))
       .when(Boolean(Find(Root, "quota")?.hidden), (El) => {
         const U = this.usage, Pct = (V) => `${Math.round(Number(V) || 0)}%`;
         // What sits at the bottom is chosen in 設定 → SiaoDesk only; this just keeps the numbers in view.
