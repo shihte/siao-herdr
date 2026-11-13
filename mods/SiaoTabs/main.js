@@ -45,6 +45,7 @@ export default class SiaoTabs extends View {
     cx.spawn(async (cx) => {
       for (;;) {
         const C = await nextCommand();
+        if (C === "newtab" || C?.name === "newtab") { this.NewTabHere(); continue; }   // SiaoTabs.newtab: the ＋
         if (C?.name !== "hints" && C !== "hints") continue;
         if (shared("siao.hints")) this.HintsOff();
         else {
@@ -128,6 +129,14 @@ export default class SiaoTabs extends View {
   }
 
   Collapsed() { return shared("siao.tabs.collapsed") ?? {}; }
+
+  // ＋: a terminal tab in the shown folder, in its own folder (not wherever the focused terminal has
+  // wandered to), and that folder's group unfolded so the new tab shows up here at the top.
+  NewTabHere() {
+    const S = spaces().find((X) => X.active);
+    if (S && this.Collapsed()[S.id]) setShared("siao.tabs.collapsed", { ...this.Collapsed(), [S.id]: false });
+    run("tab.new", S ? { space: S.id, ...(S.folder ? { folder: S.folder } : {}) } : {});
+  }
 
   // Chrome-style group label in the group's color. Click: collapse / expand its tabs (the label keeps its
   // width, so nothing jumps). Right click: the space menu.
@@ -267,7 +276,7 @@ export default class SiaoTabs extends View {
       .child(Strip)
       .when(Boolean(NewBadge), (El) => El.child(NewBadge))
       // ＋ adds a tab right here (a terminal, like ⌘T); right-click it for the menu of what to start.
-      .child(Button("tab-new", "+", () => run("tab.new", { space: spaces().find((S) => S.active)?.id }))
+      .child(Button("tab-new", "+", () => this.NewTabHere())
         .tooltip("新分頁（右鍵：選要開什麼）").on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); NewTab(); }))
       .when(Boolean(Find(Root, "quota")?.hidden), (El) => {
         const U = this.usage, Pct = (V) => `${Math.round(Number(V) || 0)}%`;
