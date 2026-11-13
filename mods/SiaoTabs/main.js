@@ -265,7 +265,6 @@ export default class SiaoTabs extends View {
     const Out = h_flex().size_full().min_w(0).px(10).pl(LightsPadding).gap(3).items_center()
       .on_mouse_up("left", () => { this.pressed = null; })
       .on_mouse_down("right", () => openOverlay({ mod: "SiaoMenu", kind: "popup", width: 220, height: 3 * 31 + 9 + 12, props: { tab: "global" } }))
-      .on_scroll_wheel((E) => { if (Math.abs(E.delta.y) >= 1) run(E.delta.y > 0 ? "tab.prev" : "tab.next"); })
       .when(SideFolded, (El) => El.child(h_flex().id("unfold").h(26).px(5).gap(4).mr(4).flex_none().items_center().rounded(6)
         .text_color(T.muted).tooltip("展開側欄").hover((S) => S.bg(T.hover).text_color(T.foreground))
         .on_mouse_down("left", Stop).on_click(Unfold)
